@@ -221,13 +221,13 @@ fig = cluster_map(cluster_shp)
 st.pyplot(fig)
 
 with st.expander('Cluster size'):
-    st.caption('The table below shows the number of PDOs that are assigned to each cluster. Some clustering algorithms produce a similar number of PDOs in each cluster while others lead to quite different cluster sizes')
+    st.write('The table below shows the number of PDOs that are assigned to each cluster. Some clustering algorithms produce a similar number of PDOs in each cluster while others lead to quite different cluster sizes')
     cluster_size = cluster_shp.groupby(m_select, as_index = False).size()
     st.table(cluster_size.set_index(m_select))
       
 st.markdown("---")
 st.markdown("## Variable comparison amongst Clusters")
-st.caption('The boxplot below shows the distribution of different variables across the various clusters. Use the selectbox to choose the variables that should be compared. By clickingn on *Plot variables!* the plot will be updated.')
+st.write('The boxplot below shows the distribution of different variables across the various clusters. Use the selectbox to choose the variables that should be compared. By clickingn on *Plot variables!* the plot will be updated.')
 
 tbl_all_info = pd.merge(cluster_shp, tbl_ind, on = 'PDOid', how = 'left')
 
@@ -241,13 +241,13 @@ fig = plot_boxes(tbl_all_info, box_vars, m_select)
 st.pyplot(fig)
 
 st.markdown('### Cluster centroids')
-st.caption('The table below shows the average value of the selected variables for each cluster')
+st.write('The table below shows the average value of the selected variables for each cluster')
 centers = tbl_all_info.groupby(m_select)[box_vars].mean()
 st.dataframe(centers.style.format('{:.2f}'))
 
 st.markdown("---")
 st.markdown("## Scatterplot")
-st.caption('In the scatterplot below, each PDO is represented by a point and the color indicates the cluster. Select the x- and y-variable for the plot in the sidebar to compare different variables against each other.')
+st.write('In the scatterplot below, each PDO is represented by a point and the color indicates the cluster. Select the x- and y-variable for the plot in the sidebar to compare different variables against each other.')
 
 radio_options = cl_select + [i for i in ['adaptive_capacity', 'Impacts', 'vulnerability'] if i not in cl_select]
 
@@ -262,7 +262,7 @@ st.pyplot(fig)
 
 st.markdown("---")
 st.markdown("## Barchart")
-st.caption('The barchart below shows the distribution of Koeppen-Geiger climate classes or different landform types within the different clusters, e.g. how many PDOs within a cluster fall into a given climate class.')
+st.write('The barchart below shows the distribution of Koeppen-Geiger climate classes or different landform types within the different clusters, e.g. how many PDOs within a cluster fall into a given climate class.')
 #Barplot
 class_var = st.radio('Classification type', options = ['koeppen', 'landform'])
 fig = plot_bar(cluster_class, class_var)
@@ -271,7 +271,7 @@ st.pyplot(fig)
 if m_select == 'kmeans':
     st.markdown("---")
     st.markdown("## Kmeans Validation")
-    st.caption('In the case of Kmean-Clustering, it is possible to get an approximation of the optimum number of clusters by looking at the Inertia (left plot, often called elbow method) or the Silhouette coefficient (right plot). The optimum number of clusters is usually around the point after which the SSE or inertia starts decreasing in a linear fashion or that maximizes the Silhouette Coefficient.')
+    st.write('In the case of Kmean-Clustering, it is possible to get an approximation of the optimum number of clusters by looking at the Inertia (left plot, often called elbow method) or the Silhouette coefficient (right plot). The optimum number of clusters is usually around the point after which the SSE or inertia starts decreasing in a linear fashion or that maximizes the Silhouette Coefficient.')
     sse, s_coef = validate_kmeans(tbl_vuln[cl_select], kmean_kwargs)
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize = (12, 4))
