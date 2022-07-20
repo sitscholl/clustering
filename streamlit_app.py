@@ -224,12 +224,7 @@ with st.expander('Cluster size'):
     st.caption('The table below shows the number of PDOs that are assigned to each cluster. Some clustering algorithms produce a similar number of PDOs in each cluster while others lead to quite different cluster sizes')
     cluster_size = cluster_shp.groupby(m_select, as_index = False).size()
     st.table(cluster_size.set_index(m_select))
-    
-st.markdown('### Cluster centroids')
-st.caption('The table below shows the average value of the selected variables for each cluster')
-centers = tbl_all_info.groupby(m_select)[box_vars].mean()
-st.dataframe(centers.style.format('{:.2f}'))
-    
+      
 st.markdown("---")
 st.markdown("## Variable comparison amongst Clusters")
 st.caption('The boxplot below shows the distribution of different variables across the various clusters. Use the selectbox to choose the variables that should be compared. By clickingn on *Plot variables!* the plot will be updated.')
@@ -244,6 +239,11 @@ vars_melt = tbl_all_info.melt(id_vars = ['PDOid', m_select], value_vars = box_va
 
 fig = plot_boxes(tbl_all_info, box_vars, m_select)
 st.pyplot(fig)
+
+st.markdown('### Cluster centroids')
+st.caption('The table below shows the average value of the selected variables for each cluster')
+centers = tbl_all_info.groupby(m_select)[box_vars].mean()
+st.dataframe(centers.style.format('{:.2f}'))
 
 st.markdown("---")
 st.markdown("## Scatterplot")
