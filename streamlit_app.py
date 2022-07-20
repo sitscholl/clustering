@@ -199,7 +199,7 @@ with mselect_container:
     
 st.markdown(f'Algorithm: **{m_select}**')
 if not 'n_clusters' in clmethods[m_select][1].keys():
-    st.caption('Cluster number is chosen automatically by this algorithm, therefor ignore parameter k')
+    st.write('Cluster number is chosen automatically by this algorithm, therefor ignore parameter k')
     
 tbl_cluster = tbl_vuln[['PDOid', *cl_select]].dropna().reset_index(drop = True)
 
@@ -215,7 +215,7 @@ colors_dict[-1] = [0, 0, 0, 0]
 colors_dict2 = {str(cl): c for cl, c, in colors_dict.items()}
 
 st.markdown("## Cluster map")
-st.caption('This map shows the spatial distribution of the resulting clusters across Europe')
+st.write('This map shows the spatial distribution of the resulting clusters across Europe')
 #Map with clusters
 fig = cluster_map(cluster_shp)
 st.pyplot(fig)
