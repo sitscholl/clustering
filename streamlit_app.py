@@ -222,20 +222,6 @@ st.pyplot(fig)
 with st.expander('Cluster size'):
     cluster_size = cluster_shp.groupby(m_select, as_index = False).size()
     st.table(cluster_size.set_index(m_select))
-
-st.markdown("---")
-st.markdown("## Scatterplot")
-
-radio_options = cl_select + [i for i in ['adaptive_capacity', 'Impacts', 'vulnerability'] if i not in cl_select]
-
-with st.sidebar:
-    st.markdown('Choose variables for scatterplot:')
-    x_var = st.radio('X-variable', options = radio_options, index = radio_options.index('Impacts'))
-    y_var = st.radio('Y-variable', options = radio_options, index = radio_options.index('adaptive_capacity'))
-    
-#Scatterplot
-fig = plot_scatter(cluster_shp, m_select, x_var, y_var)
-st.pyplot(fig)
     
 st.markdown("---")
 st.markdown("## Variable comparison amongst Clusters")
@@ -249,6 +235,20 @@ with st.form('Plot'):
 vars_melt = tbl_all_info.melt(id_vars = ['PDOid', m_select], value_vars = box_vars)
 
 fig = plot_boxes(tbl_all_info, box_vars, m_select)
+st.pyplot(fig)
+
+st.markdown("---")
+st.markdown("## Scatterplot")
+
+radio_options = cl_select + [i for i in ['adaptive_capacity', 'Impacts', 'vulnerability'] if i not in cl_select]
+
+with st.sidebar:
+    st.markdown('Choose variables for scatterplot:')
+    x_var = st.radio('X-variable', options = radio_options, index = radio_options.index('Impacts'))
+    y_var = st.radio('Y-variable', options = radio_options, index = radio_options.index('adaptive_capacity'))
+    
+#Scatterplot
+fig = plot_scatter(cluster_shp, m_select, x_var, y_var)
 st.pyplot(fig)
 
 st.markdown('### Cluster centroids')
