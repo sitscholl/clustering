@@ -6,8 +6,10 @@ import geopandas as gpd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
+import sklearn
 import sklearn.cluster as cluster
 from sklearn.metrics import silhouette_score
+from copy import deepcopy
 #from sklearn.decomposition import PCA
 #import hdbscan
 
@@ -33,7 +35,9 @@ def calc_cluster(data, clmethod, clmethods):
     func = clmethods[clmethod][0]
     kwargs = clmethods[clmethod][1]
     
-    data[clmethod] = func(**kwargs).fit_predict(data_num)
+    preds = func(**kwargs).fit_predict(data_num)
+    
+    data[clmethod] = preds
     data.sort_values(clmethod, inplace = True)
     data[clmethod] = data[clmethod].astype(str)
 
@@ -42,7 +46,26 @@ def calc_cluster(data, clmethod, clmethods):
     cluster_shp['geometry'] = cluster_shp['geometry'].centroid
     cluster_shp = cluster_shp.to_crs(4326)
     
-    return(cluster_shp)
+    if clmethod in ['kmeans', 'meanShift', 'affinityPropagation']:
+        fit = func(**kwargs).fit(data_num)
+        centers = pd.DataFrame(fit.cluster_centers_, columns = data_num.columns)
+    
+    elif clmethod in ['agg_ward', 'agg_complete', 'agg_average', 'agg_single', 'spectral', 'dbscan', 'hdbscan']:
+        clf = sklearn.neighbors.NearestCentroid()
+        clf.fit(data_num, preds)
+        centers = pd.DataFrame(clf.centroids_, columns = data_num.columns)
+        
+    else:
+        centers = pd.DataFrame(columns = data_num.columns)
+        
+    centers['sum'] = centers['Exposure'] + centers['Sensitivity'] - centers['adaptive_capacity']
+    centers['Vulnerability'] = pd.cut(centers['sum'], [-1, .4, .8, 1.2, 1.6, 2], labels = ['Very low', 'Low', 'Medium', 'High', 'Very high'])
+    centers[clmethod] = np.arange(len(centers)).astype(str)
+    
+    cluster_shp = cluster_shp.merge(centers[[clmethod, 'Vulnerability']], on = clmethod, how = 'left')
+    cluster_shp[clmethod] = pd.Categorical(cluster_shp[clmethod], categories = np.sort(cluster_shp[clmethod].unique()))
+    
+    return(cluster_shp, centers)
 
 @st.cache
 def validate_kmeans(data, kmean_kwargs):
@@ -66,14 +89,19 @@ def validate_kmeans(data, kmean_kwargs):
     return(sse, s_coef)
 
 @st.cache(allow_output_mutation = True)
-def cluster_map(cluster_shp):
+def cluster_map(cluster_shp, col):
     fig, ax = plt.subplots()
     world.to_crs(4326).plot(ax = ax, color = 'lightgrey', edgecolor = 'white', zorder = 0, lw = .5)
-    for c, data in cluster_shp.groupby(m_select):
-        label = f'{c}'
-        p_color = colors_dict2[c]
-        data.plot(color = p_color, marker = 'o', edgecolor = 'black', markersize = 15, 
-                  linewidth = 0.4, ax = ax, label = label)
+    
+    #Without copying, this part causes an output-modification warning
+    shp_copy = deepcopy(cluster_shp)
+    for c, data in shp_copy.groupby(col):
+        if len(data) > 0:
+            label = f'{c}'
+            p_color = colors_dict[c]
+            data.plot(color = p_color, marker = 'o', edgecolor = 'black', markersize = 15, 
+                      linewidth = 0.4, ax = ax, label = label)
+            
     ax.legend(loc = 'upper left')
     ax.set_facecolor('lightblue')
     ax.set_ylim(25, 55)
@@ -117,26 +145,27 @@ def plot_bar(cluster_class, class_var):
     return(fig)
 
 @st.cache(allow_output_mutation = True)
-def plot_scatter(cluster_shp, clmethod, x_var, y_var):
+def plot_scatter(cluster_shp, clmethod, col):
     
     fig, ax = plt.subplots()
-    sns.scatterplot(data = cluster_shp, x = x_var, y = y_var, hue = clmethod, ax = ax, palette = colors_dict2)
+    sns.scatterplot(data = cluster_shp, x = 'Impacts', y = 'adaptive_capacity', hue = col, ax = ax, palette = colors_dict)
             
     ax.legend(loc = 'upper right')
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_aspect('equal')
     
-    handles, labels = ax.get_legend_handles_labels()
-    # sort both labels and handles by labels
-    labels, handles = zip(*sorted(zip(labels, handles), key=lambda t: t[0]))
-    ax.legend(handles, labels, loc = 'upper right', title = 'Clusters')
+    # handles, labels = ax.get_legend_handles_labels()
+    # # sort both labels and handles by labels
+    # labels, handles = zip(*sorted(zip(labels, handles), key=lambda t: t[0]))
+    # ax.legend(handles, labels, loc = 'upper right', title = 'Clusters')
     
     return(fig)
 
 @st.cache(allow_output_mutation = True)
 def plot_boxes(tbl_all_info, box_vars, m_select):
-
+    
+    n_clusters = len(tbl_all_info[m_select].unique())
     cols = 4
     rows = math.ceil(n_clusters/cols)
     params = {"sharey": True, "sharex": True}
@@ -148,7 +177,7 @@ def plot_boxes(tbl_all_info, box_vars, m_select):
 
     for (g, data), ax in zip(vars_melt.groupby(m_select), axs.ravel()):
 
-        sns.boxplot(ax = ax, data = data, color = colors_dict2[g], x = 'value', y = 'variable', showfliers = False)
+        sns.boxplot(ax = ax, data = data, x = 'value', y = 'variable', showfliers = False)
 
         count = len(data.drop_duplicates(subset = 'PDOid'))
         ax.set_title(f'Cluster {g}\n{count} PDOs', weight = 'bold', size = 12)
@@ -180,6 +209,9 @@ with st.sidebar:
                                    default = ['Exposure', 'Sensitivity', 'adaptive_capacity'])
         
         st.form_submit_button('Calculate!')
+        
+    disp_option = st.radio('Display option', options = ['Clusters', 'Vulnerability'], index = 1)
+    class_var = st.radio('Classification type', options = ['koeppen', 'landform'])
     
 clmethods = {
     'kmeans': [cluster.KMeans, {'n_clusters': k, **kmean_kwargs}],
@@ -197,33 +229,29 @@ clmethods = {
 with mselect_container:
     m_select = st.selectbox('Clustering Algorithm', options = clmethods.keys())
     
+plot_col = m_select if disp_option == 'Clusters' else 'Vulnerability'
+    
 st.markdown(f'Algorithm: **{m_select}**')
 if not 'n_clusters' in clmethods[m_select][1].keys():
-    st.write('Cluster number is chosen automatically by this algorithm, therefor ignore parameter k')
+    st.write('Cluster number is chosen automatically by this algorithm, therefore ignore parameter k')
     
 tbl_cluster = tbl_vuln[['PDOid', *cl_select]].dropna().reset_index(drop = True)
 
-cluster_shp = calc_cluster(tbl_cluster, m_select, clmethods)
+cluster_shp, centers = calc_cluster(tbl_cluster, m_select, clmethods)
 cluster_class = cluster_shp.merge(tbl_class, on = 'PDOid', how = 'left')
 
 cmap = mpl.cm.get_cmap('Set1')
-cluster_labels = cluster_shp[m_select].astype(int).unique()
-n_clusters = len(cluster_labels)
-colors = cmap(np.linspace(0, 1, n_clusters))
-colors_dict = {cl: colors[i] for i, cl in enumerate(cluster_labels)}
-colors_dict[-1] = [0, 0, 0, 0]
-colors_dict2 = {str(cl): c for cl, c, in colors_dict.items()}
+labels = cluster_shp[plot_col].cat.categories
+n_labs = len(labels)
+
+colors = cmap(np.linspace(0, 1, n_labs))
+colors_dict = {str(cl): colors[i] for i, cl in enumerate(labels)}
 
 st.markdown("## Cluster map")
-st.write('This map shows the spatial distribution of the resulting clusters across Europe')
+st.write('This map shows the spatial distribution of the resulting clusters across Europe. The color indicates the cluster or the vulnerability level, depending on the selected display option in the sidebar.')
 #Map with clusters
-fig = cluster_map(cluster_shp)
+fig = cluster_map(cluster_shp, plot_col)
 st.pyplot(fig)
-
-with st.expander('Cluster size'):
-    st.write('The table below shows the number of PDOs that are assigned to each cluster. Some clustering algorithms produce a similar number of PDOs in each cluster while others lead to quite different cluster sizes')
-    cluster_size = cluster_shp.groupby(m_select, as_index = False).size()
-    st.table(cluster_size.set_index(m_select))
       
 st.markdown("---")
 st.markdown("## Variable comparison amongst Clusters")
@@ -233,38 +261,33 @@ tbl_all_info = pd.merge(cluster_shp, tbl_ind, on = 'PDOid', how = 'left')
 
 with st.form('Plot'):
     box_vars = st.multiselect('Select variables to compare', options = tbl_all_info.select_dtypes(np.number).columns.difference(['n_missing', 'lat', 'lon']),
-                             default = ['Exposure', 'Sensitivity', 'adaptive_capacity'])
+                              default = ['Exposure', 'Sensitivity', 'adaptive_capacity'])
     st.form_submit_button('Plot variables!')
+    
 vars_melt = tbl_all_info.melt(id_vars = ['PDOid', m_select], value_vars = box_vars)
 
 fig = plot_boxes(tbl_all_info, box_vars, m_select)
 st.pyplot(fig)
 
 st.markdown('### Cluster centroids')
-st.write('The table below shows the average value of the selected variables for each cluster')
-centers = tbl_all_info.groupby(m_select)[box_vars].mean()
-st.dataframe(centers.style.format('{:.2f}'))
+st.write('The table below shows the centroid of the selected variables for each cluster as well as the resulting vulnerability for each cluster. The sum is given by *Exposure + Sensitivity - adaptive_capacity*. The highest possible value is 2 which would also correspond to the highest vulnerability. To calculate the vulnerability, the sum is classified into 5 equally sized groups (0 - 0.4, 0.4 - 0.8, 0.8 - 1.2, 1.2 - 1.6, 1.6 - 2.0) which correspond to the five vulnerability levels (very low, low, medium, high, very high).')
+st.table(centers.set_index(m_select))
+
+st.markdown('### PDOs per vulnerability level')
+st.write('The plot below shows the number of PDOs for each vulnerability level')
+st.table(cluster_shp.groupby('Vulnerability', as_index = False).size().rename(columns = {0: 'n'}))
 
 st.markdown("---")
 st.markdown("## Scatterplot")
-st.write('In the scatterplot below, each PDO is represented by a point and the color indicates the cluster. Select the x- and y-variable for the plot in the sidebar to compare different variables against each other.')
+st.write('In the scatterplot below, each PDO is represented by a point and the color indicates the cluster or vulnerability level. Use the buttons in the sidebar to change between the two display options.')
 
-radio_options = cl_select + [i for i in ['adaptive_capacity', 'Impacts', 'vulnerability'] if i not in cl_select]
-
-with st.sidebar:
-    st.markdown('Choose variables for scatterplot:')
-    x_var = st.radio('X-variable', options = radio_options, index = radio_options.index('Impacts'))
-    y_var = st.radio('Y-variable', options = radio_options, index = radio_options.index('adaptive_capacity'))
-    
-#Scatterplot
-fig = plot_scatter(cluster_shp, m_select, x_var, y_var)
+fig = plot_scatter(cluster_shp, m_select, plot_col)
 st.pyplot(fig)
 
 st.markdown("---")
 st.markdown("## Barchart")
-st.write('The barchart below shows the distribution of Koeppen-Geiger climate classes or different landform types within the different clusters, e.g. how many PDOs within a cluster fall into a given climate class.')
-#Barplot
-class_var = st.radio('Classification type', options = ['koeppen', 'landform'])
+st.write('The barchart below shows the distribution of Koeppen-Geiger climate classes or different landform types within the different clusters, e.g. how many PDOs within a cluster fall into a given climate class. Use the classification type option in the sidebar to change between the two variables.')
+
 fig = plot_bar(cluster_class, class_var)
 st.pyplot(fig)
 
